@@ -235,6 +235,8 @@ How does your choice affect the message your map conveys?
 
 Write 1–2 sentences reflecting on the **cartographic message** your choices imply.
 
+**There tends to be more green when I change the code. It seems that the median value goes shifted and the map adjusts with the data. I think step_equal_interval is the most balanced. If the story is trying to draw contrast, I think step_quantile would still be the best option.**
+
 ------------------------------------------------------------------------
 
 ## Question: What is the poverty line for a household in Hawaii?
@@ -244,12 +246,13 @@ Can we create a map that only shows above/below the poverty line
 ```{r}
 hi_median_income <- hi_median_income |>
   mutate(
-    poverty_flag = ifelse(estimate < 30000, "Below Poverty Line", "Above Poverty Line")
+    mit_threshold = ifelse(estimate < 107689, "Below the Line", "Above the Line")
   )
 ```
 
 ```{r}
-poverty_colors <- c("Below Poverty Line" = "#d73027", "Above Poverty Line" = "#1a9850")
+
+mit_colors <- c("Below the Line" = "#d73027", "Above the Line" = "#1a9850")
 
 mapboxgl(bounds = hi_median_income) |>
   add_fill_layer(
@@ -257,15 +260,15 @@ mapboxgl(bounds = hi_median_income) |>
     source = hi_median_income,
     fill_color = match_expr(
       column = "poverty_flag",
-      values = names(poverty_colors),
-      stops = unname(poverty_colors)
+      values = names(mit_colors),
+      stops = unname(mit_colors)
     ),
     fill_opacity = 0.6
   ) |>
   add_legend(
     "Median Income Status",
-    values = names(poverty_colors),
-    colors = unname(poverty_colors),
+    values = names(mit_colors),
+    colors = unname(mit_colors),
     type = "categorical"
   )
 
@@ -343,35 +346,45 @@ Load median income, rent, or internet access for a different state using `tidyce
 #### California Example
 
 ```{r}
+hi_median_income$popup <- glue(
+  "<strong>Tract:</strong> {hi_median_income$NAME}<br><strong>Median income:</strong> {hi_median_income$estimate}"
+)
+
 # Example: Median income in California
-ca_income <- get_acs(
+hi_house_built <- get_acs(
   geography = "tract",
-  variables = "B19013_001",
-  state = "CA",
-  year = 2023,
+  variables = "B28002_002",
+  state = "HI",
+  year = 2020,
   geometry = TRUE
 )
 
-ca_scale <- interpolate_palette(
-  data = ca_income,
+hi_scale <- interpolate_palette(
+  data = hi_house_built,
   column = "estimate",
   method = "equal",
   n = 4,
   palette = viridisLite::viridis
 )
 
-mapboxgl(bounds = ca_income) |>
+mapboxgl(bounds = hi_house_built) |>
   add_fill_layer(
-    id = "ca_tracts",
-    source = ca_income,
-    fill_color = ca_scale$expression,
-    fill_opacity = 0.5
+    id = "hi_tracts",
+    source = hi_house_built,
+    fill_color = hi_scale$expression,
+    fill_opacity = 0.7,
+    popup = "popup",
+    tooltip = "estimate",
+    hover_options = list(
+      fill_color = "red",
+      fill_opacity = 1
+    )
   ) |>
   add_legend(
-    "Median income in California",
-    values = get_legend_labels(ca_scale, digits = 0, prefix = "$"),
-    colors = get_legend_colors(ca_scale),
-    type = "continuous"
+    "Households with an internet Subscription in HI",
+    values = get_legend_labels(hi_scale, digits = 0),
+    colors = get_legend_colors(hi_scale),
+    type = "categorical"
   )
 
 ```
