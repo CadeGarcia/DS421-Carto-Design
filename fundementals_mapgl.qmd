@@ -386,7 +386,7 @@ mapboxgl(bounds = hi_house_built) |>
     colors = get_legend_colors(hi_scale),
     type = "categorical"
   )
-
+# confused about the tract. My labels may be wrong!
 ```
 
 🔍 Try: - Changing the variable to median home value- Switching the state (e.g., "HI", "NY", "TX") - Using a different styling function
