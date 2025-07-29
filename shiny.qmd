@@ -1,0 +1,321 @@
+---
+title: "🗺️ Interactive Mapping with mapgl and Shiny"
+author: "DS421 – Cartographic Design"
+format:
+  html:
+    code-fold: true
+    toc: true
+    theme: cosmo
+execute:
+  echo: true
+  warning: false
+  message: false
+---
+
+## 1️⃣ Census Shiny App
+
+#### Load Libraries
+
+```{r}
+library(shiny)
+library(tidyverse)
+library(sf)
+library(mapgl)
+library(lubridate)
+library(bslib)
+library(here)
+library(tidycensus)
+library(ggpubr)
+library(plotly)
+```
+
+#### View Census Variables
+
+```{r}
+acs_vars <- load_variables(year = 2023, dataset = "acs5", cache = TRUE)
+```
+
+#### Transform Data
+
+```{r}
+# Define raw ACS variable codes
+raw_vars <- c(
+  median_income = "B19013_001",
+  bachelors_count = "B15003_022",  # Count, not percent
+  median_gross_rent = "B25064_001",
+  total_population = "B01003_001"
+)
+
+# Labels for Shiny dropdown (key = column name in wide data)
+oahu_choices <- c(
+  "Median Household Income" = "median_income",
+  "Percent with Bachelor's Degree" = "pct_bachelors",
+  "Median Gross Rent" = "median_gross_rent"
+)
+
+# Pull and transform ACS data
+hawaii_data_raw <- get_acs(
+  geography = "tract",
+  state = "HI",
+  variables = raw_vars,
+  geometry = TRUE,
+  year = 2023
+) |>
+  filter(GEOID != "15003981200") |>  # Remove Kalawao County
+  st_transform(4326)
+
+# Convert to wide format + calculate % with bachelor's
+hawaii_data <- hawaii_data_raw |>
+  select(GEOID, NAME, variable, estimate, geometry) |>
+  st_drop_geometry() |>   # temp drop for pivot
+  pivot_wider(names_from = variable, values_from = estimate) |>
+  mutate(
+    pct_bachelors = 100 * bachelors_count / total_population
+  ) |>
+  left_join(
+    hawaii_data_raw |> select(GEOID, geometry) |> distinct(),
+    by = "GEOID"
+  ) |>
+  st_as_sf()
+```
+
+#### Build Shiny App
+
+```{r}
+ui <- page_sidebar(
+  title = "Hawaii Census Map",
+  sidebar = sidebar(
+    selectInput("var", "Choose a variable to map:", choices = oahu_choices)
+  ),
+  card(
+    full_screen = TRUE,
+    maplibreOutput("map")
+  )
+)
+
+server <- function(input, output, session) {
+  output$map <- renderMaplibre({
+    # 1. Get the selected column from hawaii_data
+    selected_data <- hawaii_data |> 
+      mutate(var_value = .data[[input$var]])
+
+    # 2. Use interpolate_palette() with a good break method
+    continuous_scale <- interpolate_palette(
+      data = selected_data,
+      column = "var_value",
+      method = "equal",  # Or "quantile"
+      n = 4,              # Reduce to 4 breaks to avoid crowding
+      palette = viridisLite::viridis
+    )
+
+    # 3. Format legend labels using prefix/suffix
+    legend_labels <- switch(input$var,
+      "median_income" = get_legend_labels(continuous_scale, digits = 0, prefix = "$"),
+      "pct_bachelors" = get_legend_labels(continuous_scale, digits = 0, suffix = "%"),
+      "median_gross_rent" = get_legend_labels(continuous_scale, digits = 0, prefix = "$"),
+      get_legend_labels(continuous_scale, digits = 0)  # fallback
+    )
+
+    # 4. Map with scale expression and legend
+    maplibre(style = carto_style("positron")) |>
+      fit_bounds(selected_data) |>
+      add_fill_layer(
+        id = "tracts",
+        source = selected_data,
+        fill_color = continuous_scale$expression,
+        fill_opacity = 0.75
+      ) |>
+      add_legend(
+        legend_title = names(oahu_choices)[oahu_choices == input$var],
+        values = legend_labels,
+        colors = get_legend_colors(continuous_scale),
+        type = "continuous"
+      )
+  })
+}
+
+
+shinyApp(ui, server)
+
+```
+
+#### ggplot
+
+Let's see if there is a relationship between our census variables by creating a scatter plot
+
+```{r}
+scatter_plot <- ggplot(hawaii_data, aes(x = median_income, y = median_gross_rent)) +
+  geom_point() +
+  geom_smooth() +
+  stat_cor(output.type = "text", label.sep = '\n') +
+  theme_minimal()
+
+scatter_plot
+```
+
+Now lets make it interactive
+
+```{r}
+ggplotly(scatter_plot)
+```
+
+## 🧩 Challenge 1
+
+Can you add the functionality to your shiny app (new panel) that allows users to pick two census variables to plot on an interactive scatter plot using `ggplotly()` and `stat_cor()`
+
+```{r}
+# Variable choices
+oahu_choices <- c(
+  "Median Income" = "median_income",
+  "Percent with Bachelor's" = "pct_bachelors",
+  "Median Gross Rent" = "median_gross_rent"
+)
+
+# UI
+ui <- page_sidebar(
+  title = "Hawaii Census Map",
+  sidebar = sidebar(
+    selectInput("var", "Choose a variable to map:", choices = oahu_choices),
+    hr(),
+    selectInput("xvar", "X-axis variable:", choices = oahu_choices),
+    selectInput("yvar", "Y-axis variable:", choices = oahu_choices)
+  ),
+  layout_columns(
+    card(
+      full_screen = TRUE,
+      maplibreOutput("map")
+    ),
+    card(
+      full_screen = TRUE,
+      plotlyOutput("scatter")
+    )
+  )
+)
+
+# Server
+server <- function(input, output, session) {
+
+  output$map <- renderMaplibre({
+    selected_data <- hawaii_data |> 
+      mutate(var_value = .data[[input$var]])
+
+    continuous_scale <- interpolate_palette(
+      data = selected_data,
+      column = "var_value",
+      method = "equal",
+      n = 4,
+      palette = viridisLite::viridis
+    )
+
+    legend_labels <- switch(input$var,
+      "median_income" = get_legend_labels(continuous_scale, digits = 0, prefix = "$"),
+      "pct_bachelors" = get_legend_labels(continuous_scale, digits = 0, suffix = "%"),
+      "median_gross_rent" = get_legend_labels(continuous_scale, digits = 0, prefix = "$"),
+      get_legend_labels(continuous_scale, digits = 0)
+    )
+
+    maplibre(style = carto_style("positron")) |>
+      fit_bounds(selected_data) |>
+      add_fill_layer(
+        id = "tracts",
+        source = selected_data,
+        fill_color = continuous_scale$expression,
+        fill_opacity = 0.75
+      ) |>
+      add_legend(
+        legend_title = names(oahu_choices)[oahu_choices == input$var],
+        values = legend_labels,
+        colors = get_legend_colors(continuous_scale),
+        type = "continuous"
+      )
+  })
+
+  output$scatter <- renderPlotly({
+    req(input$xvar, input$yvar)
+
+    scatter_plot <- ggplot(hawaii_data, aes_string(x = input$xvar, y = input$yvar)) +
+      geom_point(alpha = 0.7, color = "steelblue") +
+      geom_smooth(method = "lm", se = TRUE, color = "darkorange") +
+      stat_cor(method = "pearson", output.type = "text", label.sep = "\n") +
+      theme_minimal() +
+      labs(
+        x = names(oahu_choices)[oahu_choices == input$xvar],
+        y = names(oahu_choices)[oahu_choices == input$yvar]
+      )
+
+    ggplotly(scatter_plot)
+  })
+}
+
+shinyApp(ui, server)
+```
+
+## 🧩 Challenge 2
+
+Can you create a shiny app using your LANDSAT_USA_contiguous_and_Hawaii_7d.csv in the data folder that allows users to filter the map by confidence. For example, the user can select from a side dropdown to only show *high* confidence fires, *medium* confidence fires, or *low* confidence fires. Also add a date slider so users can toggle the map by date. Bonus: Can you add a heatmap layer users can toggle on and off?
+
+```{r}
+# Load dataset
+fires <- read_csv("data/LANDSAT_USA_contiguous_and_Hawaii_7d.csv")
+
+# UI
+ui <- fluidPage(
+  titlePanel("Fires in the USA and Hawaii (Last 7 Days)"),
+  sidebarLayout(
+    sidebarPanel(
+      selectInput("confidence_level", "Select fire confidence level:",
+        choices = c(
+          "High confidence fires" = "high",
+          "Medium confidence fires" = "nominal",
+          "Low confidence fires" = "low"
+        ),
+        selected = "high"
+      )
+    ),
+    mainPanel(
+      plotlyOutput("firePlot")
+    )
+  )
+)
+
+# Server
+server <- function(input, output, session) {
+  filtered_data <- reactive({
+    req(input$confidence_level)
+    fires %>%
+      filter(confidence == input$confidence_level)
+  })
+
+  output$firePlot <- renderPlotly({
+    plot <- ggplot(filtered_data(), aes(x = longitude, y = latitude)) +
+      geom_point(alpha = 0.6, color = "#d73027") +
+      labs(
+        title = paste(toupper(input$confidence_level), "Confidence Fires"),
+        x = "Longitude", y = "Latitude"
+      ) +
+      theme_minimal()
+
+    ggplotly(plot)
+  })
+    # Render MapLibre GL map
+  output$fire_map <- renderMaplibre({
+    data <- filtered_data()
+
+    # Turn into an sf object
+    fire_sf <- sf::st_as_sf(data, coords = c("longitude", "latitude"), crs = 4326)
+
+    maplibre(style = carto_style("voyager")) |>
+      fit_bounds(fire_sf) |>
+      add_circle_layer(
+        id = "fire_points",
+        source = fire_sf,
+        circle_color = "#e34a33",
+        circle_radius = 5,
+        circle_opacity = 0.7
+      )
+  })
+}
+
+shinyApp(ui, server)
+
+```
