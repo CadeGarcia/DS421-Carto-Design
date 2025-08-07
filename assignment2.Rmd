@@ -12,14 +12,14 @@ library(here)
 library(sf)
 library(viridis)
 library(tidyverse)
+library(bslib)
 ```
 
 ```{r}
-county_data <- st_read(here("data/DS421_SU25.gpkg"))
+county_data <- st_read(here("data/county_data.gpkg"))
 ```
 
 ```{r}
-# Get numeric columns for dropdown menu
 language_vars <- county_data %>%
   st_drop_geometry() %>%
   select(contains("english"), contains("spanish"), contains("hawaiian"), contains("japanese")) %>%
@@ -27,14 +27,15 @@ language_vars <- county_data %>%
   names()
 
 # UI
-ui <- fluidPage(
+ui <- page_sidebar(
   titlePanel("County Map Viewer"),
   sidebarLayout(
     sidebarPanel(
-      selectInput("var", "Choose a variable to map:", choices = numeric_vars)
+      selectInput("var", "Choose a variable to map:", choices = language_vars)
     ),
-    mainPanel(
-      mapglOutput("county_map", height = "600px")
+    card(
+      full_screen = TRUE,
+      maplibreOutput("map")
     )
   )
 )
@@ -42,7 +43,7 @@ ui <- fluidPage(
 # Server
 server <- function(input, output, session) {
 
-  output$county_map <- renderMapgl({
+  output$county_map <- renderMaplibre({
     req(input$var)
 
     # Drop NAs
@@ -58,17 +59,21 @@ server <- function(input, output, session) {
       )
 
     # Render map
-    mapgl() %>%
+    map_widget <- mapgl() %>%
       add_fill(
         data = plot_data,
         color = plot_data$color,
         popup = paste0(input$var, ": ", round(vals, 2))
       ) %>%
       add_navigation()
+    
+      
+    mapgl::as_widget(map_widget)
+
   })
 }
 
-# Run the app
+# Run the app 
 shinyApp(ui, server)
 
 ```
