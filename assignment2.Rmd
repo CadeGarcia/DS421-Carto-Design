@@ -20,8 +20,9 @@ county_data <- st_read(here("data/DS421_SU25.gpkg"))
 
 ```{r}
 # Get numeric columns for dropdown menu
-numeric_vars <- county_data %>%
+language_vars <- county_data %>%
   st_drop_geometry() %>%
+  select(contains("english"), contains("spanish"), contains("hawaiian"), contains("japanese")) %>%
   select(where(is.numeric)) %>%
   names()
 
