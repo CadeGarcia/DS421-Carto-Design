@@ -1,0 +1,73 @@
+---
+title: "assignment2"
+author: "Cade Garcia"
+date: "2025-08-07"
+output: html_document
+---
+
+```{r}
+library(shiny)
+library(mapgl)
+library(here)
+library(sf)
+library(viridis)
+library(tidyverse)
+```
+
+```{r}
+county_data <- st_read(here("data/DS421_SU25.gpkg"))
+```
+
+```{r}
+# Get numeric columns for dropdown menu
+numeric_vars <- county_data %>%
+  st_drop_geometry() %>%
+  select(where(is.numeric)) %>%
+  names()
+
+# UI
+ui <- fluidPage(
+  titlePanel("County Map Viewer"),
+  sidebarLayout(
+    sidebarPanel(
+      selectInput("var", "Choose a variable to map:", choices = numeric_vars)
+    ),
+    mainPanel(
+      mapglOutput("county_map", height = "600px")
+    )
+  )
+)
+
+# Server
+server <- function(input, output, session) {
+
+  output$county_map <- renderMapgl({
+    req(input$var)
+
+    # Drop NAs
+    plot_data <- county_data %>% filter(!is.na(.data[[input$var]]))
+
+    # Normalize selected variable for color scaling
+    vals <- plot_data[[input$var]]
+    pal <- viridis(length(vals), option = "C")
+
+    plot_data <- plot_data %>%
+      mutate(
+        color = pal[rank(vals, ties.method = "first")]
+      )
+
+    # Render map
+    mapgl() %>%
+      add_fill(
+        data = plot_data,
+        color = plot_data$color,
+        popup = paste0(input$var, ": ", round(vals, 2))
+      ) %>%
+      add_navigation()
+  })
+}
+
+# Run the app
+shinyApp(ui, server)
+
+```
