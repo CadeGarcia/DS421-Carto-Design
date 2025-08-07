@@ -1,0 +1,37 @@
+---
+title: "Final_project"
+author: "Cade Garcia"
+date: "2025-08-05"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## R Markdown
+
+```{r}
+library(shiny)
+library(mapgl)
+library(mapboxapi)
+library(sf)
+library(tidycensus)
+```
+
+```{r}
+# Get population for Hawaii census tracts
+oahu_pop <- get_acs(
+  geography = "tract",
+  state = "HI",
+  county = "Honolulu",
+  variables = "B01003_001", # total population
+  geometry = TRUE,
+  year = 2024
+)
+```
+
+```{r}
+# load rest of data layers 
+
+```
