@@ -1,10 +1,3 @@
----
-  title: "Final_project"
-author: "Cade Garcia"
-date: "2025-08-05"
-output: html_document
----
-
 library(shiny)
 library(mapgl)
 library(mapboxapi)
