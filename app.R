@@ -21,7 +21,7 @@ oahu_pop <- get_acs(
   geometry = TRUE,
   year = 2023
 )
-
+ 
 
 #Download from github "final_data" folder
 evac_zones <- st_read(here("final_data/Tsunami_Evacuation_All_Zones.geojson"))
