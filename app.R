@@ -13,7 +13,6 @@ library(tidycensus)
 
 ### Loading Data
 
-
 # Get population for Hawaii census tracts
 oahu_pop <- get_acs(
   geography = "tract",
@@ -24,7 +23,6 @@ oahu_pop <- get_acs(
 )
 
 
-
 #Download from github "final_data" folder
 evac_zones <- st_read(here("final_data/Tsunami_Evacuation_All_Zones.geojson"))
 
@@ -32,126 +30,7 @@ evac_zones <- st_read(here("final_data/Tsunami_Evacuation_All_Zones.geojson"))
 #Download from github "final_data" folder
 traffic <- st_read(here("final_data/Traffic_Analysis_Zones_Oahu.geojson"))
 
-
-
-glimpse(oahu_pop)
-
-
 ### Shiny App Code
-
-
-# Choices for the dropdown
-available_views <- c("Population Density", "Evacuation Zones", "Density and Evac Zones", "Traffic Data")
-
-ui <- page_sidebar(
-  title = "Oahu Tsunami Risk Map",
-  sidebar = sidebar(
-    selectInput("view_choice", "Choose Data to Display:", choices = available_views)
-  ),
-  card(
-    full_screen = TRUE,
-    maplibreOutput("map", height = "100vh")
-  )
-)
-
-server <- function(input, output, session) {
-  filtered_data <- reactive({
-    list(
-      pop = oahu_pop,
-      zones = evac_zones,
-      traffic = traffic
-    )
-  })
-  
-  output$map <- renderMaplibre({
-    data_list <- filtered_data()
-    pop_data <- data_list$pop
-    zone_data <- data_list$zones
-    traffic_data <- data_list$traffic
-    
-    map <- maplibre(style = carto_style("positron"))
-    
-    map <- map |> fit_bounds(pop_data, animate = FALSE)
-    
-    # Evacuation zone layer
-    if (input$view_choice %in% c("Evacuation Zones", "Density and Evac Zones")) {
-      map <- map |>
-        add_fill_layer(
-          id = "evac_zones_layer",
-          source = zone_data,
-          fill_color = list(
-            "match",
-            get_column("zone_code"),
-            1, "#D96B6B",  # Red for zone 1
-            2, "#E5D88F",  # Yellow for zone 2
-            3, "#8CCB87",  # Green for zone 3
-            "#808080"      # Gray fallback color if none match
-          ),
-          fill_opacity = 0.7,
-          popup = "zone_desc",
-          tooltip = "zone_type",
-          hover_options = list(
-            fill_opacity = 0.5
-          )
-        )
-    }
-    
-    
-    # Population Density layer
-    if (input$view_choice %in% c("Population Density", "Density and Evac Zones")) {
-      min_val <- min(pop_data$estimate, na.rm = TRUE)
-      max_val <- max(pop_data$estimate, na.rm = TRUE)
-      
-      map <- map |>
-        add_fill_layer(
-          id = "population_layer",
-          source = pop_data,
-          fill_color = interpolate(
-            column = "estimate",
-            values = c(min_val, max_val),
-            stops = c("#edf8fb", "#3182bd"),  #6a51a3
-            na_color = "lightgrey"
-          ),
-          fill_opacity = 0.6,
-          popup = "popup",
-          tooltip = "estimate",
-          hover_options = list(
-            fill_color = "yellow",
-            fill_opacity = 1
-          )
-        )
-    }
-    
-    if (input$view_choice %in% c("Traffic Data", "All")) {
-      # Get min and max of the numeric column you want to color by
-      min_val <- min(traffic_data$hawaiistgrdsownertaz_oaharea, na.rm = TRUE)
-      max_val <- max(traffic_data$hawaiistgrdsownertaz_oaharea, na.rm = TRUE)
-      
-      map <- map |>
-        add_fill_layer(
-          id = "traffic_layer",
-          source = traffic_data,
-          fill_color = interpolate(
-            column = "hawaiistgrdsownertaz_oaharea",
-            values = c(min_val, max_val),
-            stops = c("#fee5d9", "#de2d26"),  # light pink to red
-            na_color = "lightgrey"
-          ),
-          fill_opacity = 0.5,
-          tooltip = "hawaiistgrdsownertaz_oaharea",
-          hover_options = list(
-            fill_opacity = 0.8
-          )
-        )
-    }
-    
-    map
-  })
-}
-
-shinyApp(ui, server)
-```
-
 
 # Choices for the dropdown
 available_views <- c("Population Density", "Evacuation Zones", "Density and Evac Zones", "Traffic Data")
@@ -288,4 +167,3 @@ server <- function(input, output, session) {
 }
 
 shinyApp(ui, server)
-
